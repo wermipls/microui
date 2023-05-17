@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "microui.h"
 
 #define unused(x) ((void) (x))
@@ -180,6 +181,7 @@ void mu_end(mu_Context *ctx) {
   }
 
   /* reset input state */
+  ctx->delta_ms = 0;
   ctx->key_pressed = 0;
   ctx->input_text[0] = '\0';
   ctx->mouse_pressed = 0;
@@ -417,6 +419,10 @@ void mu_input_text(mu_Context *ctx, const char *text) {
   int size = strlen(text) + 1;
   expect(len + size <= (int) sizeof(ctx->input_text));
   memcpy(ctx->input_text + len, text, size);
+}
+
+void mu_input_deltatime(mu_Context *ctx, int delta_ms) {
+  ctx->delta_ms = delta_ms;
 }
 
 
@@ -691,6 +697,7 @@ void mu_update_control(mu_Context *ctx, mu_Id id, mu_Rect rect, int opt) {
   if (ctx->hover == id) {
     if (ctx->mouse_pressed) {
       mu_set_focus(ctx, id);
+      ctx->click_mouse_pos = ctx->mouse_pos;
     } else if (!mouseover) {
       ctx->hover = 0;
     }
@@ -1040,11 +1047,68 @@ static void scrollbars(mu_Context *ctx, mu_Container *cnt, mu_Rect *body) {
 }
 
 
+#define infinite_scrollbar(ctx, cnt, b, cs, x, y, w, h)                     \
+  do {                                                                      \
+    if (1) {                                                                \
+      mu_Rect base, thumb;                                                  \
+      mu_Id id = mu_get_id(ctx, "!scrollbar" #y, 11);                       \
+                                                                            \
+      /* get sizing / positioning */                                        \
+      base = *b;                                                            \
+      base.x = b->x + b->w;                                                 \
+      base.w = ctx->style->scrollbar_size;                                  \
+                                                                            \
+      /* handle input */                                                    \
+      mu_update_control(ctx, id, base, 0);                                  \
+      if (ctx->focus == id && ctx->mouse_down == MU_MOUSE_LEFT) {           \
+        int d = (ctx->mouse_pos.y - ctx->click_mouse_pos.y);                \
+        float b = d > 0 ? 1 : -1;                                           \
+        cnt->scroll.y += b * powf(abs(d), 1.5) * (ctx->delta_ms / 250.0);   \
+      }                                                                     \
+                                                                            \
+      /* draw base and thumb */                                             \
+      ctx->draw_frame(ctx, base, MU_COLOR_SCROLLBASE);                      \
+      thumb = base;                                                         \
+      thumb.h -= 64;                                                        \
+      thumb.y += 32;                                                        \
+      ctx->draw_frame(ctx, thumb, MU_COLOR_SCROLLTHUMB);                    \
+                                                                            \
+      /* set this as the scroll_target (will get scrolled on mousewheel) */ \
+      /* if the mouse is over it */                                         \
+      if (mu_mouse_over(ctx, *b)) { ctx->scroll_target = cnt; }             \
+    } else {                                                                \
+      cnt->scroll.y = 0;                                                    \
+    }                                                                       \
+  } while (0)
+
+
+static void scrollbar_inf(mu_Context *ctx, mu_Container *cnt, mu_Rect *body) {
+  int sz = ctx->style->scrollbar_size;
+  mu_Vec2 cs = cnt->content_size;
+  cs.x += ctx->style->padding * 2;
+  cs.y += ctx->style->padding * 2;
+  mu_push_clip_rect(ctx, *body);
+  /* resize body to make room for scrollbar */
+  body->w -= sz;
+  infinite_scrollbar(ctx, cnt, body, cs, x, y, w, h);
+  mu_pop_clip_rect(ctx);
+}
+
+
 static void push_container_body(
   mu_Context *ctx, mu_Container *cnt, mu_Rect body, int opt
 ) {
-  if (~opt & MU_OPT_NOSCROLL) { scrollbars(ctx, cnt, &body); }
-  push_layout(ctx, expand_rect(body, -ctx->style->padding), cnt->scroll);
+  if (~opt & MU_OPT_NOSCROLL) {
+    if (opt & MU_OPT_INFSCROLLY) {
+      scrollbar_inf(ctx, cnt, &body);
+    } else {
+      scrollbars(ctx, cnt, &body);
+    }
+  }
+  push_layout(
+    ctx,
+    expand_rect(body, -ctx->style->padding),
+    (mu_Vec2) { cnt->scroll.x, cnt->scroll.y });
   cnt->body = body;
 }
 

@@ -88,7 +88,8 @@ enum {
   MU_OPT_AUTOSIZE     = (1 << 9),
   MU_OPT_POPUP        = (1 << 10),
   MU_OPT_CLOSED       = (1 << 11),
-  MU_OPT_EXPANDED     = (1 << 12)
+  MU_OPT_EXPANDED     = (1 << 12),
+  MU_OPT_INFSCROLLY   = (1 << 13),
 };
 
 enum {
@@ -112,6 +113,7 @@ typedef MU_REAL mu_Real;
 typedef void* mu_Font;
 
 typedef struct { int x, y; } mu_Vec2;
+typedef struct { float x, y; } mu_Vec2f;
 typedef struct { int x, y, w, h; } mu_Rect;
 typedef struct { unsigned char r, g, b, a; } mu_Color;
 typedef struct { mu_Id id; int last_update; } mu_PoolItem;
@@ -152,7 +154,7 @@ typedef struct {
   mu_Rect rect;
   mu_Rect body;
   mu_Vec2 content_size;
-  mu_Vec2 scroll;
+  mu_Vec2f scroll;
   int zindex;
   int open;
 } mu_Container;
@@ -201,8 +203,10 @@ struct mu_Context {
   mu_Container containers[MU_CONTAINERPOOL_SIZE];
   mu_PoolItem treenode_pool[MU_TREENODEPOOL_SIZE];
   /* input state */
+  int delta_ms;
   mu_Vec2 mouse_pos;
   mu_Vec2 last_mouse_pos;
+  mu_Vec2 click_mouse_pos;
   mu_Vec2 mouse_delta;
   mu_Vec2 scroll_delta;
   int mouse_down;
@@ -243,6 +247,7 @@ void mu_input_scroll(mu_Context *ctx, int x, int y);
 void mu_input_keydown(mu_Context *ctx, int key);
 void mu_input_keyup(mu_Context *ctx, int key);
 void mu_input_text(mu_Context *ctx, const char *text);
+void mu_input_deltatime(mu_Context *ctx, int delta_ms);
 
 mu_Command* mu_push_command(mu_Context *ctx, int type, int size);
 int mu_next_command(mu_Context *ctx, mu_Command **cmd);
